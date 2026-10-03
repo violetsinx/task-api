@@ -1,0 +1,4 @@
+node_modules
+coverage
+prisma/generated
+prisma/migrations
