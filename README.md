@@ -1,160 +1,151 @@
 # task-api
 
-`task-api` adalah REST API manajemen task untuk portfolio backend Node.js.
+Production-ready REST API manajemen task untuk showcase portfolio backend developer.
 
-## Project overview
+![CI Status](https://github.com/violetsinx/task-api/actions/workflows/ci.yml/badge.svg)
+![Node.js](https://img.shields.io/badge/Node.js-22.x-green.svg)
+![Express](https://img.shields.io/badge/Express-5.x-lightgrey.svg)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17-blue.svg)
+![Prisma](https://img.shields.io/badge/Prisma-6.x-blueviolet.svg)
 
-Phase 1 menyediakan fondasi aplikasi dan satu vertical slice lengkap: `GET /api/v1/health` dan `POST /api/v1/auth/register`. Register memvalidasi input, menormalisasi email, melakukan hashing password dengan bcrypt, lalu menyimpan user melalui Prisma ke PostgreSQL.
+---
 
-Login, JWT aktif, dan task CRUD sengaja belum diimplementasikan.
+## Highlights & Keunggulan Arsitektur
 
-## Tech stack
+- **Clean Layered Architecture**: Pemisahan tanggung jawab secara tegas (`routes` -> `middlewares` -> `controllers` -> `services` -> `repositories` -> `Prisma/PostgreSQL`).
+- **Secure Authentication & Authorization**:
+  - Hashing password dengan `bcrypt` (12 salt rounds).
+  - Stateless authentication via JSON Web Tokens (JWT).
+  - Sanitasi response (tidak pernah mengekspos `passwordHash`).
+- **Strict Multi-Tenant / Ownership Scoping (Anti-IDOR)**:
+  - Validasi kepemilikan resource `Task` dilakukan langsung pada query database layer (`findFirst({ where: { id, userId } })`), mencegah akses tidak sah antar-user.
+- **Strict Input Validation**: Validasi schema menyeluruh menggunakan `Zod` pada request body dan URL route parameter.
+- **Automated Integration Testing**: Suite testing komprehensif menggunakan `node:test` native runner + `Supertest` dengan database PostgreSQL terisolasi.
+- **OpenAPI 3.0 Contract**: Spesifikasi API lengkap dan terdokumentasi di [`openapi.yaml`](./openapi.yaml).
+- **CI/CD Quality Gates**: Otomasi GitHub Actions untuk linting ESLint, formatting Prettier, validasi migrasi Prisma, dan automated testing.
 
-Node.js 22+, JavaScript ESM, Express 5, PostgreSQL, Prisma 6, Zod, bcrypt, `node:test`, Supertest, ESLint, Prettier, dotenv, Docker Compose.
+---
 
-## Architecture
+## Tech Stack
+
+| Layer              | Teknologi                                           |
+| ------------------ | --------------------------------------------------- |
+| **Runtime**        | Node.js 22+ (ES Modules)                            |
+| **Framework**      | Express 5                                           |
+| **Database & ORM** | PostgreSQL 17, Prisma ORM 6                         |
+| **Validation**     | Zod                                                 |
+| **Security**       | bcrypt, jsonwebtoken                                |
+| **Testing**        | Node.js Native Test Runner (`node:test`), Supertest |
+| **Code Quality**   | ESLint, Prettier                                    |
+| **Specification**  | OpenAPI 3.0.3                                       |
+
+---
+
+## Architecture Flow
 
 ```text
-request -> route -> validation -> controller -> service -> repository -> Prisma -> PostgreSQL -> response
+HTTP Request
+   │
+   ▼
+[ Express Router ] ──► [ Auth Middleware (JWT Verification) ]
+   │
+   ▼
+[ Validation Middleware (Zod) ]
+   │
+   ▼
+[ Controller ] (HTTP Request/Response translation)
+   │
+   ▼
+[ Service ] (Business Logic & Domain Sanitization)
+   │
+   ▼
+[ Repository ] (Database Queries scoped by userId)
+   │
+   ▼
+[ Prisma ORM & PostgreSQL ]
 ```
 
-```text
-src/
-├── config/         environment dan Prisma client
-├── controllers/    HTTP request/response
-├── middlewares/    validation, auth example, error handling
-├── routes/         route definitions
-├── services/       business logic register
-├── repositories/   akses data Prisma
-├── validators/     schema Zod
-├── utils/          helper bersama
-├── app.js          Express app
-└── server.js       HTTP server startup
-```
+---
 
-`app.js` diekspor untuk testing tanpa membuka port. `server.js` menangani startup server.
+## API Endpoints Overview
 
-## Database schema
+Semua route task dilindungi header `Authorization: Bearer <token>`.
 
-`User` menyimpan identitas user dan `password_hash`; email unique. `Task` sudah didefinisikan untuk milestone berikutnya.
+| Method   | Endpoint                | Deskripsi                                  | Auth   |
+| -------- | ----------------------- | ------------------------------------------ | ------ |
+| `GET`    | `/api/v1/health`        | Health check endpoint                      | Public |
+| `POST`   | `/api/v1/auth/register` | Mendaftarkan user baru                     | Public |
+| `POST`   | `/api/v1/auth/login`    | Login user & generate JWT access token     | Public |
+| `GET`    | `/api/v1/tasks`         | Mengambil semua task milik user yang login | Bearer |
+| `POST`   | `/api/v1/tasks`         | Membuat task baru                          | Bearer |
+| `GET`    | `/api/v1/tasks/:id`     | Mengambil detail task berdasarkan ID       | Bearer |
+| `PATCH`  | `/api/v1/tasks/:id`     | Memperbarui task (status, priority, dll)   | Bearer |
+| `DELETE` | `/api/v1/tasks/:id`     | Menghapus task berdasarkan ID              | Bearer |
 
-```text
-users: id, name, email, password_hash, created_at, updated_at
-tasks: id, user_id, title, description, status, priority, due_date, created_at, updated_at
-```
+Lihat [`openapi.yaml`](./openapi.yaml) untuk spesifikasi request/response schema lengkap.
 
-Task status: `todo`, `in_progress`, `done`. Task priority: `low`, `medium`, `high`.
+---
 
-## API endpoints
+## Quickstart & Local Setup
 
-### Health check
+### 1. Prasyarat
 
-```http
-GET /api/v1/health
-```
+- Node.js 22+
+- PostgreSQL atau Docker
 
-Response `200`: `{ "status": "ok" }`
-
-### Register
-
-```http
-POST /api/v1/auth/register
-Content-Type: application/json
-```
-
-Request:
-
-```json
-{ "name": "Ada Lovelace", "email": "ada@example.com", "password": "password123" }
-```
-
-Response `201`:
-
-```json
-{
-  "user": {
-    "id": 1,
-    "name": "Ada Lovelace",
-    "email": "ada@example.com",
-    "createdAt": "2026-10-03T00:00:00.000Z",
-    "updatedAt": "2026-10-03T00:00:00.000Z"
-  }
-}
-```
-
-Invalid input returns `400`; duplicate email returns `409`; unexpected errors are logged server-side and return `500`. `passwordHash` never appears in responses.
-
-## Local setup
-
-Requirements: Node.js 22+, PostgreSQL, and Docker Compose.
+### 2. Instalasi
 
 ```bash
+git clone https://github.com/violetsinx/task-api.git
+cd task-api
 npm install
+```
+
+### 3. Konfigurasi Environment
+
+```bash
 cp .env.example .env
-docker compose up -d
+```
+
+Sesuaikan `.env`:
+
+```dotenv
+PORT=3000
+DATABASE_URL="postgresql://postgres:postgres@localhost:5432/task_api"
+JWT_SECRET="super-secret-jwt-key"
+NODE_ENV="development"
+```
+
+### 4. Database Migration & Menjalankan Server
+
+```bash
 npx prisma migrate deploy
 npm run dev
 ```
 
-API: `http://localhost:3000`.
+Server berjalan di `http://localhost:3000`.
 
-Without Docker, point `DATABASE_URL` at an existing PostgreSQL database and run `npx prisma migrate deploy`.
+---
 
-## Environment variables
+## Testing & Quality Assurance
 
-| Variable       | Example                                                  | Description               |
-| -------------- | -------------------------------------------------------- | ------------------------- |
-| `PORT`         | `3000`                                                   | HTTP server port          |
-| `DATABASE_URL` | `postgresql://postgres:postgres@localhost:5432/task_api` | PostgreSQL connection URL |
-| `NODE_ENV`     | `development`                                            | Runtime environment       |
-
-`.env` is local-only and must not be committed.
-
-## Testing
+Proyek ini dilengkapi pengujian integrasi end-to-end:
 
 ```bash
+# Menjalankan linter
 npm run lint
+
+# Memeriksa format kode
 npm run format:check
-npm test
+
+# Menjalankan seluruh test suite
+DATABASE_URL="postgresql://postgres@localhost:55432/task_api_test" JWT_SECRET="test-secret" npm test
 ```
 
-Register tests verify persistence, email normalization, password hashing, response sanitization, invalid input, and duplicate email. Use a disposable database; never point tests at production.
+### Cakupan Pengujian:
 
-## Docker usage
-
-Docker Compose provides PostgreSQL only:
-
-```bash
-docker compose up -d
-docker compose ps
-npx prisma migrate deploy
-docker compose down
-```
-
-The application runs on the host with `npm run dev` during Phase 1. Full application containerization is deferred.
-
-## Future improvements
-
-1. Login with password verification.
-2. JWT signing.
-3. JWT verification and protected routes.
-4. Create/list task with owner scoping.
-5. Task detail, update, and delete.
-6. Task validation and domain errors.
-7. Pagination, filtering, sorting, and search.
-8. OpenAPI/Swagger documentation.
-9. Request logging and rate limiting.
-10. Database-backed health check and graceful shutdown.
-11. CI and deployment configuration.
-
-Suggested commits:
-
-```text
-feat: add login with password verification
-feat: add jwt authentication middleware
-feat: add task creation and list endpoints
-feat: enforce task ownership on detail update and delete
-feat: add task query parameters
-docs: publish OpenAPI contract
-chore: add CI quality gates
-```
+1. **Health Check**: Status 200 service readiness.
+2. **Registration**: Normalisasi email, enkripsi password, sanitasi output, duplikasi email (409), validasi format (400).
+3. **Authentication**: Login kredensial valid, proteksi token palsu/kedaluwarsa (401).
+4. **Task CRUD**: Create, read, update, delete operasi task.
+5. **IDOR Prevention / Tenant Scoping**: Verifikasi user A tidak dapat membaca/mengubah/menghapus task milik user B (404 Not Found).
