@@ -1,6 +1,6 @@
-# task-api
+# Task API
 
-Production-ready REST API manajemen task untuk showcase portfolio backend developer.
+Production-ready REST API manajemen task.
 
 ![CI Status](https://github.com/violetsinx/task-api/actions/workflows/ci.yml/badge.svg)
 ![Node.js](https://img.shields.io/badge/Node.js-22.x-green.svg)
